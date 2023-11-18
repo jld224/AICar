@@ -18,21 +18,40 @@ import math
 # Note: Your belief probabilities should sum to 1. (belief probabilities = posterior prob)
 
 def getBeliefwMovingObj(N, observation, transitionP, carLength=1):
-    std = carLength * 1./3
-    # print(N, observation, transitionP, carLength)
+    std = carLength / 3.
 
-    # period of observation time
     timeSteps = observation.shape[0]
 
-    # tracking hidden car one step at a time. carTrackingFrames is a collection of probMaps.
-    carTrackingFrames = np.zeros((timeSteps+1, N, N))  # space holder
+    carTrackingFrames = np.zeros((timeSteps + 1, N, N))
+    carTrackingFrames[0] = 1. / (N * N)
 
-    # initial position: every spot has the same probability
-    carTrackingFrames[0] = 1./(N*N)
+    for t in range(1, timeSteps + 1):
+        agentX, agentY, eDist = observation.iloc[t - 1]
 
-    # your code
+        # compute prior
+        prior = np.zeros((N, N))
+        for _, row in transitionP.iterrows():
+            x, y, n, e, s, w = int(row.X), int(row.Y), row.N, row.E, row.S, row.W
+            prior[(x-1)%N, y] += n * carTrackingFrames[t-1, x, y]
+            prior[(x+1)%N, y] += s * carTrackingFrames[t-1, x, y]
+            prior[x, (y-1)%N] += w * carTrackingFrames[t-1, x, y]
+            prior[x, (y+1)%N] += e * carTrackingFrames[t-1, x, y]
+
+        # compute emission probabilities
+        emissionP = np.zeros((N, N))
+        for x in range(N):
+            for y in range(N):
+                dx, dy = abs(agentX - x), abs(agentY - y)
+                dx, dy = min(dx, N - dx), min(dy, N - dy)
+                dist = math.sqrt(dx ** 2 + dy ** 2)
+                emissionP[x, y] = norm.pdf(eDist, dist, std)
+
+        # update beliefs
+        posterior = emissionP * prior
+        carTrackingFrames[t] = posterior / posterior.sum()
 
     return carTrackingFrames[1:]
+
 
 
 # No need to change the main function.
@@ -44,6 +63,8 @@ def main():
     transitionP = pd.read_csv(transitionProbFileName)
     readings = pd.read_csv(microphoneReadingFileName, nrows=reportingTime)
     readings_df = pd.DataFrame(readings, columns=['agentX', 'agentY', 'eDist'])
+
+    print("Shape of transitionP:", transitionP.shape)
 
     probMapWithTime = getBeliefwMovingObj(gridSize, readings_df, transitionP)
 

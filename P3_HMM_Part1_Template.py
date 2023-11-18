@@ -50,7 +50,6 @@ def getBelief(data, gridSize, carLength):
 
 
 # No need to change the main function.
-# No need to change the main function.
 def main():
     # Example command line arguments: 10 3 stationaryCarReading10.csv
     gridSize, reportingTime, microphoneReadingFileName,  = sys.argv[1:]
@@ -60,12 +59,12 @@ def main():
     print(gridSize, reportingTime, microphoneReadingFileName)
 
     data = pd.read_csv(microphoneReadingFileName, nrows=reportingTime)
-    # print(data.head())  # take a peak of your data
+    print(data.head())  # take a peak of your data
 
     df = pd.DataFrame(data, columns=['agentX', 'agentY', 'eDist'])
     rowC, colC, carPosBelief = getBelief(df, gridSize, carLength)  # return numpy array of probabilities
 
-    # printGrid(carPosBelief)
+    printGrid(carPosBelief)
     print("Most probable location (row#, column#): (", str(rowC), ",", str(colC), ")")
     df = pd.DataFrame(carPosBelief, columns=np.array(list(range(gridSize))))
     df.to_csv("probMap" + str(gridSize)+"_atTime" + str(reportingTime) + ".csv", sep=',')
