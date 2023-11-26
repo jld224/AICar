@@ -9,6 +9,16 @@ import sys
 from scipy.stats import norm
 import math
 
+# Function: getTopTwoBeliefs
+# ---------------------
+# Utility function to return top 2 beliefs from getBelief function.
+def getTopTwoBeliefs(carTrackingFrames):
+    flatten_frames = carTrackingFrames.flatten()
+    first_idx = np.argmax(flatten_frames)
+    flatten_frames[first_idx] = -1  # Exclude the first max from the next search
+    second_idx = np.argmax(flatten_frames)
+    top_two_indices = [np.unravel_index(first_idx, carTrackingFrames.shape), np.unravel_index(second_idx, carTrackingFrames.shape)]
+    return top_two_indices
 
 # Function: Get Belief
 # ---------------------
@@ -18,12 +28,12 @@ import math
 # Note: Your belief probabilities should sum to 1. (belief probabilities = posterior prob)
 
 def getBeliefwMovingObj(N, observation, transitionP, carLength=1):
-    std = carLength / 3.
+    std = (2.0 * carLength) / 3.0  # Given from supplemental data
 
     timeSteps = observation.shape[0]
-
     carTrackingFrames = np.zeros((timeSteps + 1, N, N))
     carTrackingFrames[0] = 1. / (N * N)
+    top_two_locations = np.zeros((timeSteps, 2, 2), dtype=int)  # To store top two locations
 
     for t in range(1, timeSteps + 1):
         agentX, agentY, eDist = observation.iloc[t - 1]
@@ -32,10 +42,10 @@ def getBeliefwMovingObj(N, observation, transitionP, carLength=1):
         prior = np.zeros((N, N))
         for _, row in transitionP.iterrows():
             x, y, n, e, s, w = int(row.X), int(row.Y), row.N, row.E, row.S, row.W
-            prior[(x-1)%N, y] += n * carTrackingFrames[t-1, x, y]
-            prior[(x+1)%N, y] += s * carTrackingFrames[t-1, x, y]
-            prior[x, (y-1)%N] += w * carTrackingFrames[t-1, x, y]
-            prior[x, (y+1)%N] += e * carTrackingFrames[t-1, x, y]
+            prior[(x-1)%N, y] += carTrackingFrames[t-1, (x-1)%N, y] * n
+            prior[(x+1)%N, y] += carTrackingFrames[t-1, (x+1)%N, y] * s
+            prior[x, (y-1)%N] += carTrackingFrames[t-1, x, (y-1)%N] * w
+            prior[x, (y+1)%N] += carTrackingFrames[t-1, x, (y+1)%N] * e
 
         # compute emission probabilities
         emissionP = np.zeros((N, N))
@@ -50,8 +60,12 @@ def getBeliefwMovingObj(N, observation, transitionP, carLength=1):
         posterior = emissionP * prior
         carTrackingFrames[t] = posterior / posterior.sum()
 
-    return carTrackingFrames[1:]
+        top_two_locations[t-1] = getTopTwoBeliefs(carTrackingFrames[t])
 
+    # Output top two locations at time t
+    print(f"Top two most likely locations of the hidden car at time {timeSteps}: {top_two_locations[-1]}")
+
+    return carTrackingFrames[1:]
 
 
 # No need to change the main function.
