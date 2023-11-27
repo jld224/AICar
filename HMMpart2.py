@@ -27,46 +27,51 @@ def getTopTwoBeliefs(carTrackingFrames):
 # @return: your belief of the prob the "hidden" car is at each tile at each time step.
 # Note: Your belief probabilities should sum to 1. (belief probabilities = posterior prob)
 
-def getBeliefwMovingObj(N, observation, transitionP, carLength=1):
-    std = (2.0 * carLength) / 3.0  # Given from supplemental data
+def getBeliefwMovingObj(grid_size, sensor_data, prob_matrix, grid_unit=1):
+    deviation = grid_unit / 3.0
+    num_steps = sensor_data.shape[0]
+    belief_matrix = np.zeros((num_steps + 1, grid_size, grid_size))
+    belief_matrix[0] = 1. / (grid_size ** 2)
 
-    timeSteps = observation.shape[0]
-    carTrackingFrames = np.zeros((timeSteps + 1, N, N))
-    carTrackingFrames[0] = 1. / (N * N)
-    top_two_locations = np.zeros((timeSteps, 2, 2), dtype=int)  # To store top two locations
+    for step in range(1, num_steps + 1):
+        for x in range(grid_size):
+            for y in range(grid_size):
+                # Summation of probability based on prior belief and transition model
+                prob_sum = 0
+                for prev_x in range(grid_size):
+                    for prev_y in range(grid_size):
+                        # Calculate grid distance
+                        delta_x = min(abs(x - prev_x), grid_size - abs(x - prev_x))
+                        delta_y = min(abs(y - prev_y), grid_size - abs(y - prev_y))
+                        probabilities = prob_matrix.loc[(prob_matrix['X'] == prev_x) & (prob_matrix['Y'] == prev_y),
+                                                        ['N', 'E', 'S', 'W']].values.flatten()
+                        # Determine direction and update belief accordingly
+                        if delta_x == abs(x - prev_x):
+                            direction = 0 if (y - prev_y) > 0 else 2
+                            direction = direction if delta_y != 0 else 0
+                            prob_sum += belief_matrix[step - 1, prev_x, prev_y] * probabilities[direction]
+                        else:
+                            direction = 1 if (x - prev_x) > 0 else 3
+                            prob_sum += belief_matrix[step - 1, prev_x, prev_y] * probabilities[direction]
 
-    for t in range(1, timeSteps + 1):
-        agentX, agentY, eDist = observation.iloc[t - 1]
+                # Factoring in sensor measurements
+                observer_x, observer_y, expected_dist = sensor_data.iloc[step - 1][['agentX', 'agentY', 'eDist']]
+                sensor_delta_x = min(abs(x - observer_x), grid_size - abs(x - observer_x))
+                sensor_delta_y = min(abs(y - observer_y), grid_size - abs(y - observer_y))
+                actual_dist = np.sqrt(sensor_delta_x ** 2 + sensor_delta_y ** 2)
 
-        # compute prior
-        prior = np.zeros((N, N))
-        for _, row in transitionP.iterrows():
-            x, y, n, e, s, w = int(row.X), int(row.Y), row.N, row.E, row.S, row.W
-            prior[(x-1)%N, y] += carTrackingFrames[t-1, (x-1)%N, y] * n
-            prior[(x+1)%N, y] += carTrackingFrames[t-1, (x+1)%N, y] * s
-            prior[x, (y-1)%N] += carTrackingFrames[t-1, x, (y-1)%N] * w
-            prior[x, (y+1)%N] += carTrackingFrames[t-1, x, (y+1)%N] * e
+                # Emission probability computation
+                sensor_prob = norm.pdf(expected_dist, actual_dist, deviation)
 
-        # compute emission probabilities
-        emissionP = np.zeros((N, N))
-        for x in range(N):
-            for y in range(N):
-                dx, dy = abs(agentX - x), abs(agentY - y)
-                dx, dy = min(dx, N - dx), min(dy, N - dy)
-                dist = math.sqrt(dx ** 2 + dy ** 2)
-                emissionP[x, y] = norm.pdf(eDist, dist, std)
+                # Finalizing belief update for current cell
+                belief_matrix[step, x, y] = prob_sum * sensor_prob
 
-        # update beliefs
-        posterior = emissionP * prior
-        carTrackingFrames[t] = posterior / posterior.sum()
+        # Probability normalization for current time step
+        current_total = np.sum(belief_matrix[step])
+        if current_total > 0:
+            belief_matrix[step] /= current_total
 
-        top_two_locations[t-1] = getTopTwoBeliefs(carTrackingFrames[t])
-
-    # Output top two locations at time t
-    print(f"Top two most likely locations of the hidden car at time {timeSteps}: {top_two_locations[-1]}")
-
-    return carTrackingFrames[1:]
-
+    return belief_matrix[1:]
 
 # No need to change the main function.
 def main():
